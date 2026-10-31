@@ -346,6 +346,10 @@ dialog {
 dialog::backdrop { background: rgba(20, 14, 8, .45); }
 dialog h2 { margin: 0 0 8px; font-size: 18px; }
 .dlg-body { color: var(--text-2); margin-bottom: 18px; }
+.dlg-body p { margin: 0 0 10px; }
+.dlg-body > :last-child { margin-bottom: 0; }
+.dlg-list { margin: 0 0 10px; padding-left: 20px; }
+.dlg-list li + li { margin-top: 4px; }
 .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 
 @media (max-width: 600px) {

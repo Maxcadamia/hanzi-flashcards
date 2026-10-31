@@ -536,6 +536,8 @@ function viewRun() {
       known: g.knownIds.size,
       knownFirstTry: g.knownFirstTry,
       unknownPresses: g.unknownPresses,
+      // every card answered, so a merge can rebuild the card stats from sessions
+      answered: [...touched],
       // snapshot, so the results page still reads right after a unit is edited or deleted
       missed: [...g.misses].map(([id, misses]) => {
         const { card, unit } = g.entries.get(id);
@@ -981,13 +983,15 @@ function viewSettings() {
     </div>`}
     ${owner ? `
     <div class="panel">
-      <h2>Backup</h2>
-      <p class="desc muted" style="margin-top:-6px">Units and every player's history are stored only on this device. Export a backup now and then, and import it to restore or to move to another device. On iPhone and iPad, the Home Screen app and Safari keep separate data.</p>
+      <h2>Backup and other devices</h2>
+      <p class="desc muted" style="margin-top:-6px">Units and every player's history are stored only on this device. To copy them to another device, export here and import the file there. Importing adds what is new and keeps what is already on the device, so two devices can swap files back and forth. On iPhone and iPad, the Home Screen app and Safari keep separate data.</p>
       <div class="actions" style="justify-content:flex-start">
-        <button class="btn" id="s-export">Export backup</button>
-        <button class="btn" id="s-import">Import backup…</button>
+        <button class="btn" id="s-export">Export everything</button>
+        <button class="btn" id="s-export-units">Export units only</button>
+        <button class="btn" id="s-import">Import…</button>
         <input type="file" id="s-file" accept=".json,application/json" hidden>
       </div>
+      <p class="desc muted" style="margin:10px 0 0">Units only leaves out the players and their history: use it to give your units to someone for their own phone.</p>
     </div>
     <div class="panel">
       <h2>Reset</h2>
@@ -1028,14 +1032,12 @@ function viewSettings() {
 
   if (!owner) return;
 
-  document.getElementById('s-export').addEventListener('click', async () => {
-    const name = `flashcards-backup-${dayKey(new Date())}.json`;
-    const json = Store.exportJSON();
+  async function sendFile(json, name, title) {
     // phones and tablets: the share sheet (Save to Files, AirDrop, …); a download is unreliable in a Home Screen app
     if (matchMedia('(pointer: coarse)').matches && navigator.canShare) {
       const file = new File([json], name, { type: 'application/json' });
       if (navigator.canShare({ files: [file] })) {
-        try { await navigator.share({ files: [file], title: 'Flashcards backup' }); } catch (err) { /* closed the share sheet */ }
+        try { await navigator.share({ files: [file], title }); } catch (err) { /* closed the share sheet */ }
         return;
       }
     }
@@ -1046,7 +1048,22 @@ function viewSettings() {
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  });
+  }
+  document.getElementById('s-export').addEventListener('click', () =>
+    sendFile(Store.exportJSON(), `flashcards-backup-${dayKey(new Date())}.json`, 'Flashcards backup'));
+  document.getElementById('s-export-units').addEventListener('click', () =>
+    sendFile(Store.exportUnitsJSON(), `flashcards-units-${dayKey(new Date())}.json`, 'Flashcards units'));
+
+  const names = list => esc(list.slice(0, 3).join(', ')) + (list.length > 3 ? ` and ${list.length - 3} more` : '');
+  function mergeItems(m) {
+    const li = [];
+    if (m.added.length) li.push(`adds ${plural(m.added.length, 'unit')}: ${names(m.added)}`);
+    if (m.updated.length) li.push(`updates ${plural(m.updated.length, 'unit')} to the newer version in the file: ${names(m.updated)}`);
+    if (m.removed.length) li.push(`deletes ${plural(m.removed.length, 'unit')} that ${m.removed.length === 1 ? 'was' : 'were'} deleted on the device the file came from: ${names(m.removed)}`);
+    m.renamed.forEach(r => li.push(`renames ${esc(r.from)} to ${esc(r.to)}`));
+    m.sessions.forEach(s => li.push(`adds ${plural(s.count, 'session')} to ${esc(s.name)}'s history${s.nameThere ? ` (called ${esc(s.nameThere)} in the file)` : ''}`));
+    return li.length ? `<ul class="dlg-list">${li.map(x => `<li>${x}</li>`).join('')}</ul>` : '';
+  }
 
   const $file = document.getElementById('s-file');
   document.getElementById('s-import').addEventListener('click', () => $file.click());
@@ -1054,18 +1071,56 @@ function viewSettings() {
     const f = $file.files[0];
     $file.value = '';
     if (!f) return;
-    const ans = await ask('Replace all data?',
-      `Importing <b>${esc(f.name)}</b> replaces every unit, player and session on this device with the ones in the file.`,
-      [{ label: 'Cancel', value: '', focus: true }, { label: 'Replace', value: 'go', cls: 'primary' }]);
-    if (ans !== 'go') return;
+    let plan;
     try {
-      Store.importJSON(await f.text());
-      pick.selected = null;
-      applyTheme();
-      await notice('Backup imported', `${plural(Store.units().length, 'unit')} loaded.`);
-      location.hash = '#/who';
+      plan = Store.planImport(await f.text());
     } catch (err) {
       notice('Import failed', esc(err.message || 'The file could not be read.'));
+      return;
+    }
+
+    const file = `<b>${esc(f.name)}</b>`;
+    const when = plan.exportedAt ? ` from ${esc(fmtDate(plan.exportedAt))}` : '';
+    const items = mergeItems(plan.merge);
+    let ans;
+    if (plan.kind === 'units') {
+      if (!items) { notice('Nothing new', `This device already has every unit in ${file}.`); return; }
+      ans = await ask('Import units?',
+        `<p>${file} is a units file${when} with ${plural(plan.units, 'unit')}. Importing it:</p>${items}
+         <p class="muted">Players and their history are not touched.</p>`,
+        [{ label: 'Cancel', value: '' }, { label: 'Import units', value: 'merge', cls: 'primary', focus: true }]);
+    } else {
+      const who = plan.players.length ? ` (${esc(plan.players.join(', '))})` : '';
+      const byPlace = plan.merge.sessions.some(s => s.nameThere) ? '<p class="muted">Players are matched by their place in the list, not by name.</p>' : '';
+      ans = await ask('Import backup?',
+        `<p>${file} is a full backup${when}: ${plural(plan.units, 'unit')} and ${plural(plan.sessions, 'session')}${who}.</p>
+         ${items ? `<p>Merging keeps everything on this device and:</p>${items}${byPlace}` : '<p>This device already has everything in it, so merging changes nothing.</p>'}
+         <p class="muted">Replace everything makes this device an exact copy of the file instead.</p>`,
+        [{ label: 'Cancel', value: '', focus: !items }, { label: 'Replace everything', value: 'replace', cls: 'danger' }]
+          .concat(items ? [{ label: 'Merge', value: 'merge', cls: 'primary', focus: true }] : []));
+    }
+    if (ans !== 'merge' && ans !== 'replace') return;
+
+    const { units, edited, sessions } = plan.lost || {};
+    if (ans === 'replace' && (units || edited || sessions)) {
+      const only = [units && plural(units, 'unit'), sessions && plural(sessions, 'session')].filter(Boolean).join(' and ');
+      const lost = [only && `deletes ${only} that ${units + sessions === 1 ? 'is' : 'are'} only on this device`,
+        edited && `undoes newer edits to ${plural(edited, 'unit')}`].filter(Boolean).join(' and ');
+      const sure = await ask('Replace everything?', `Replacing ${lost}.`,
+        [{ label: 'Cancel', value: '', focus: true }, { label: 'Replace everything', value: 'go', cls: 'primary' }]);
+      if (sure !== 'go') return;
+    }
+
+    plan.apply(ans);
+    pick.selected = null;
+    if (ans === 'replace') {
+      applyTheme();
+      await notice('Backup imported', `This device is now a copy of the file: ${plural(Store.units().length, 'unit')}.`);
+      location.hash = '#/who';
+    } else {
+      viewSettings();
+      renderWhoChip();
+      notice('Imported', `This device now has ${plural(Store.units().length, 'unit')}.`);
     }
   });
 

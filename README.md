@@ -11,7 +11,20 @@ Flashcards for reviewing Chinese vocab and phrases. Plain HTML/JS, no build step
 3. Open it from the Home Screen icon. It then runs full screen and works offline.
 
 The Home Screen app keeps its own data, separate from Safari. Add your units in the Home Screen app,
-or move them across with **Settings → Export backup / Import backup**.
+or bring them across from another device (below).
+
+## Moving data between devices
+
+Nothing syncs by itself: each device, and on iPhone the Home Screen app and Safari, keeps its own
+copy. In **Settings → Backup and other devices** (first player only):
+
+- **Export everything** saves units, player names and every player's history to a file.
+- **Export units only** leaves out the players and their history: for giving your units to someone.
+- **Import…** merges a file in. It adds new units and sessions, takes the newer copy of a unit
+  edited on both, deletes units that were deleted on the other device, and keeps everything else
+  already here. Importing the same file twice changes nothing, so two devices can swap files back
+  and forth. Players are matched by their place in the list (player 2 with player 2).
+- A full backup can instead **Replace everything**, making the device an exact copy of the file.
 
 ## How it works
 
