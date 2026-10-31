@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hanzi Flashcards</title>
+<meta name="description" content="Flashcards for reviewing Chinese vocab and phrases.">
+<meta name="theme-color" content="#fffdf9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#211e18" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Hanzi">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#/play"><span>汉字</span> Flashcards</a>
+  <nav>
+    <a href="#/play" data-nav="play">Play</a>
+    <a href="#/units" data-nav="units">Units</a>
+    <a href="#/history" data-nav="history">History</a>
+    <a href="#/settings" data-nav="settings">Settings</a>
+  </nav>
+  <a class="who-chip" id="who-chip" href="#/who"></a>
+</header>
+<main id="app"></main>
+<dialog id="dialog"></dialog>
+<script src="pinyin.js"></script>
+<script src="store.js"></script>
+<script src="charts.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
