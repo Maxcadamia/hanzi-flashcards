@@ -3,7 +3,7 @@
 // Routing is by location.hash so the browser's back button works and nothing needs a server.
 
 // Bump on every release. Settings shows it, which is how to tell what a device is running.
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.2.1';
 const APP_RELEASED = '2026-11-01';
 
 const $app = document.getElementById('app');
@@ -1143,6 +1143,9 @@ function viewSettings() {
       <div class="setting">
         <div><b>Activation</b><div class="desc">Device ID <span class="mono">${esc(Activation.device)}</span></div></div>
         <span class="desc">${Activation.how() === 'code' ? `Activated ${esc(new Date(Activation.at()).toLocaleDateString(undefined, { dateStyle: 'medium' }))}` : 'Activated · in use before codes'}</span>
+      </div>
+      <div class="setting">
+        <div><b>Personal use only</b><div class="desc">Hanzi Flashcards is a private, non-commercial project made for personal study and shared with invited friends. It is not for sale, and it may not be sold, resold or passed on to others. It comes as is, with no warranty, so export a backup now and then.</div></div>
       </div>
     </div>
   </section>`;
