@@ -115,6 +115,31 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 5px; font-
 .who-name { font-weight: 700; font-size: 16px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .who-meta { font-size: 12px; color: var(--muted); }
 .who-foot { margin-top: 20px; font-size: 13px; }
+/* ---------- activation ---------- */
+.locked .topbar { display: none; }
+.locked main { padding-top: max(24px, env(safe-area-inset-top)); }
+.lock { max-width: 420px; margin: 6vh auto 0; text-align: center; }
+.lock-mark {
+  width: 72px; height: 72px; margin: 0 auto 18px; border-radius: 18px;
+  background: var(--accent); color: #fff; font: 700 40px/72px var(--font-hanzi);
+}
+.lock h1 { margin-bottom: 8px; }
+.lock-lead { color: var(--text-2); margin: 0 0 20px; }
+.lock-form { display: grid; gap: 8px; padding: 20px; text-align: left; }
+.lock-form label { font-weight: 600; font-size: 14px; }
+input.lock-input {
+  padding: 12px; text-align: center; text-transform: uppercase; letter-spacing: .1em;
+  font: 600 20px/1.2 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+.lock-msg { margin: 0; min-height: 1.5em; font-size: 14px; color: var(--bad); }
+.lock-meta { display: flex; justify-content: center; gap: 28px; margin: 18px 0 0; }
+.lock-meta dt { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+.lock-meta dd { margin: 2px 0 0; color: var(--text-2); font: 13px ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.lock-foot { font-size: 13px; margin-top: 18px; }
+.shake { animation: shake .35s; }
+@keyframes shake { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
+@media (prefers-reduced-motion: reduce) { .shake { animation: none; } }
+
 .profile-row .profile-name { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 200px; }
 .profile-row input { max-width: 260px; }
 .profile-row .row-actions { display: flex; align-items: center; gap: 10px; }
@@ -193,6 +218,10 @@ input.invalid { border-color: var(--bad); }
 .tbl tr:last-child td { border-bottom: 0; }
 .tbl td.num, .tbl th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tbl .hz { font-family: var(--font-hanzi); font-size: 18px; white-space: nowrap; }
+.tbl td.when { white-space: nowrap; }
+.tbl td.when span { display: block; font-size: 12px; color: var(--muted); }
+.tbl .units-col { width: 100%; min-width: 11em; }
+.tbl.sessions th.num { white-space: normal; }
 .tbl tbody tr.clickable { cursor: pointer; }
 .tbl tbody tr.clickable:hover td { background: var(--surface-2); }
 
@@ -337,6 +366,8 @@ kbd {
 .setting { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 12px 0; }
 .setting + .setting { border-top: 1px solid var(--border); }
 .setting .desc { color: var(--muted); font-size: 13px; }
+.setting .version { font-weight: 700; font-size: 17px; font-variant-numeric: tabular-nums; padding: 2px 12px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
 
 /* ---------- dialog ---------- */
 dialog {

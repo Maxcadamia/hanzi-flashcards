@@ -244,6 +244,8 @@ const Store = (() => {
     profile: () => data.profiles.find(p => p.id === data.active),
     isOwner: () => data.active === 'p1',
     ownerName: () => data.profiles[0].name,
+    // has anyone made anything on this device yet
+    inUse: () => data.units.length > 0 || PROFILE_IDS.some(id => id !== 'guest' && data.play[id].sessions.length > 0),
     sessionCount: id => data.play[id].sessions.length,
     // Picking a profile always starts Guest from nothing: a new guest is a new person.
     setActive(id) {

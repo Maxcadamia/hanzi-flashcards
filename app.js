@@ -2,6 +2,10 @@
 // Pages: Play (choose units) -> Run (the cards) -> Results; Units + editor; History; Settings.
 // Routing is by location.hash so the browser's back button works and nothing needs a server.
 
+// Bump on every release. Settings shows it, which is how to tell what a device is running.
+const APP_VERSION = '1.2.0';
+const APP_RELEASED = '2026-11-01';
+
 const $app = document.getElementById('app');
 const dlg = document.getElementById('dialog');
 
@@ -17,6 +21,12 @@ function fmtDuration(ms) {
 }
 const fmtDate = iso => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 const fmtDay = d => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+// the date without the year when it is this year, and the time on its own, for narrow table cells
+const shortDay = iso => {
+  const d = new Date(iso);
+  return d.getFullYear() === new Date().getFullYear() ? fmtDay(d) : d.toLocaleDateString(undefined, { dateStyle: 'medium' });
+};
+const clock = iso => new Date(iso).toLocaleTimeString(undefined, { timeStyle: 'short' });
 const dayKey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 function shuffle(a) {
@@ -121,6 +131,128 @@ function viewWho() {
   });
 }
 
+// ---------------------------------------------------------------- activation
+// A deterrent, not security: the check runs on the device and this file is public, so anyone
+// who reads the source can get past it. One code for everyone; only its hash is here. Devices
+// already in use when this was added were let in without a code. Changing ACTIVATION_HASH
+// locks out every device that got in with the old code; those older devices stay in.
+
+const ACTIVATION_HASH = 6171702345866619;
+
+// cyrb53: a small 53-bit string hash
+function hash53(str) {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507);
+  h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507);
+  h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+}
+
+// Kept apart from the flashcard data, so "Delete everything" and backups never touch it.
+const Activation = (() => {
+  const KEY = 'cnFlashcards.activation';
+  let rec = {};
+  try { rec = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { rec = {}; }
+  const keep = () => { try { localStorage.setItem(KEY, JSON.stringify(rec)); } catch (e) { /* storage blocked: it asks again next time */ } };
+  if (!rec.device) {
+    const A = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    const s = [...crypto.getRandomValues(new Uint32Array(8))].map(n => A[n % A.length]).join('');
+    rec.device = s.slice(0, 4) + '-' + s.slice(4);
+    keep();
+  }
+  return {
+    device: rec.device,
+    how: () => rec.how,
+    at: () => rec.at,
+    ok: () => rec.how === 'existing' || (rec.how === 'code' && rec.code === ACTIVATION_HASH),
+    grant(how) {
+      rec = { device: rec.device, how, at: new Date().toISOString() };
+      if (how === 'code') rec.code = ACTIVATION_HASH;
+      keep();
+    },
+    // 'ok', 'bad', or after five wrong codes in a row the seconds left to wait
+    check(typed) {
+      const wait = Math.ceil(((rec.waitUntil || 0) - Date.now()) / 1000);
+      if (wait > 0) return wait;
+      if (hash53('hanzi:' + String(typed).toUpperCase().replace(/[^A-Z0-9]/g, '')) === ACTIVATION_HASH) {
+        this.grant('code');
+        return 'ok';
+      }
+      rec.fails = (rec.fails || 0) + 1;
+      if (rec.fails >= 5) { rec.fails = 0; rec.waitUntil = Date.now() + 30000; }
+      keep();
+      return rec.waitUntil > Date.now() ? 30 : 'bad';
+    },
+  };
+})();
+
+function viewLocked() {
+  $app.innerHTML = `
+  <section class="lock">
+    <div class="lock-mark" aria-hidden="true">汉</div>
+    <h1>Activate Hanzi Flashcards</h1>
+    <p class="lock-lead">This copy is not activated. Activation codes are issued to invited users only.</p>
+    <form class="panel lock-form" id="act-form" autocomplete="off" novalidate>
+      <label for="act-code">Activation code</label>
+      <input id="act-code" class="lock-input" placeholder="XXXX-XXXX-XXXX" maxlength="14"
+        autocapitalize="characters" autocorrect="off" spellcheck="false" autocomplete="off" enterkeyhint="go">
+      <p class="lock-msg" id="act-msg" role="alert"></p>
+      <button class="btn primary big" id="act-go">Activate</button>
+    </form>
+    <dl class="lock-meta">
+      <div><dt>Device ID</dt><dd>${esc(Activation.device)}</dd></div>
+      <div><dt>Version</dt><dd>${APP_VERSION}</dd></div>
+    </dl>
+    <p class="muted lock-foot">If you were invited, ask the person who shared this app with you for the code.</p>
+  </section>`;
+
+  const $form = document.getElementById('act-form');
+  const $in = document.getElementById('act-code');
+  const $msg = document.getElementById('act-msg');
+  const $go = document.getElementById('act-go');
+  const fail = text => {
+    $msg.textContent = text;
+    $form.classList.remove('shake');
+    void $form.offsetWidth;
+    $form.classList.add('shake');
+  };
+  $in.addEventListener('input', () => {
+    const raw = $in.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+    $in.value = (raw.match(/.{1,4}/g) || []).join('-');
+    $msg.textContent = '';
+  });
+  let busy = false;
+  $form.addEventListener('submit', e => {
+    e.preventDefault();
+    if (busy) return;
+    if ($in.value.replace(/-/g, '').length < 12) { fail('Enter all 12 characters of the code.'); return; }
+    busy = true;
+    $go.disabled = true;
+    $go.textContent = 'Checking…';
+    $msg.textContent = '';
+    setTimeout(() => {
+      const r = Activation.check($in.value);
+      if (r === 'ok') {
+        $go.textContent = 'Activated ✓';
+        setTimeout(() => { if (location.hash === '#/who') route(); else location.hash = '#/who'; }, 700);
+        return;
+      }
+      busy = false;
+      $go.disabled = false;
+      $go.textContent = 'Activate';
+      fail(r === 'bad' ? 'That code is not valid. Check it and try again.' : `Too many attempts. Try again in ${plural(r, 'second')}.`);
+      $in.select();
+    }, 700);
+  });
+  $in.focus();
+}
+
 // ---------------------------------------------------------------- routing
 
 let cleanup = null;
@@ -135,6 +267,9 @@ function setNav(page) {
 function route() {
   if (cleanup) { const c = cleanup; cleanup = null; c(); }
   if (dlg.open) dlg.close();
+  const locked = !Activation.ok();
+  document.body.classList.toggle('locked', locked);
+  if (locked) return viewLocked();
   const [page, id, sub] = location.hash.replace(/^#\/?/, '').split('/');
   setNav(page);
   window.scrollTo(0, 0);
@@ -910,11 +1045,11 @@ function viewHistory() {
 
     <div class="section">
       <h2>All sessions</h2>
-      <div class="panel"><div class="table-wrap"><table class="tbl">
-        <thead><tr><th>Date</th><th>Units</th><th class="num">Cards</th><th class="num">First time</th><th class="num">Don't know</th><th class="num">Time</th></tr></thead>
+      <div class="panel"><div class="table-wrap"><table class="tbl sessions">
+        <thead><tr><th>Date</th><th class="units-col">Units</th><th class="num">Cards</th><th class="num">First time</th><th class="num">Don't know</th><th class="num">Time</th></tr></thead>
         <tbody id="h-rows">${sessions.slice().reverse().map(s => `<tr class="clickable" data-id="${s.id}">
-          <td style="white-space:nowrap"><a href="#/results/${s.id}">${fmtDate(s.startedAt)}</a></td>
-          <td>${esc(s.units.map(u => u.name).join(', '))}${s.completed ? '' : ' <span class="badge warn">ended early</span>'}</td>
+          <td class="when"><a href="#/results/${s.id}">${shortDay(s.startedAt)}</a><span>${clock(s.startedAt)}</span></td>
+          <td class="units-col">${esc(s.units.map(u => u.name).join(', '))}${s.completed ? '' : ' <span class="badge warn">ended early</span>'}</td>
           <td class="num">${s.known}/${s.total}</td>
           <td class="num">${pct(s.knownFirstTry, s.known)}%</td>
           <td class="num">${s.unknownPresses}</td>
@@ -999,6 +1134,17 @@ function viewSettings() {
         <button class="btn danger" id="s-clear-all">Delete everything</button>
       </div>
     </div>` : ''}
+    <div class="panel">
+      <h2>About</h2>
+      <div class="setting">
+        <div><b>Version</b><div class="desc">Released ${esc(new Date(APP_RELEASED + 'T12:00:00').toLocaleDateString(undefined, { dateStyle: 'medium' }))}</div></div>
+        <span class="version">${APP_VERSION}</span>
+      </div>
+      <div class="setting">
+        <div><b>Activation</b><div class="desc">Device ID <span class="mono">${esc(Activation.device)}</span></div></div>
+        <span class="desc">${Activation.how() === 'code' ? `Activated ${esc(new Date(Activation.at()).toLocaleDateString(undefined, { dateStyle: 'medium' }))}` : 'Activated · in use before codes'}</span>
+      </div>
+    </div>
   </section>`;
 
   bindFrontChoice('s-front');
@@ -1134,6 +1280,8 @@ function viewSettings() {
 // ---------------------------------------------------------------- start
 
 Store.load();
+// devices already in use when activation codes were added are let in without one
+if (!Activation.how() && Store.inUse()) Activation.grant('existing');
 applyTheme();
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 // offline support for the Home Screen app; service workers don't run from a file:// page

@@ -4,6 +4,8 @@ Flashcards for reviewing Chinese vocab and phrases. Plain HTML/JS, no build step
 
 **Open it:** https://maxcadamia.github.io/hanzi-flashcards/
 
+A new device asks for an activation code the first time it opens. Codes are given to invited users.
+
 ## Put it on an iPhone or iPad
 
 1. Open the link above in **Safari**.
