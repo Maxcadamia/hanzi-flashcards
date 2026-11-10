@@ -21,7 +21,9 @@ Nothing syncs by itself: each device, and on iPhone the Home Screen app and Safa
 copy. In **Settings → Backup and other devices** (first player only):
 
 - **Export everything** saves units, player names and every player's history to a file.
-- **Export units only** leaves out the players and their history: for giving your units to someone.
+- **Export all units** leaves out the players and their history: for giving your units to someone.
+- **Export some units…** does the same for only the units you tick. Importing that file adds or
+  updates those units and leaves every other unit alone.
 - **Import…** merges a file in. It adds new units and sessions, takes the newer copy of a unit
   edited on both, deletes units that were deleted on the other device, and keeps everything else
   already here. Importing the same file twice changes nothing, so two devices can swap files back

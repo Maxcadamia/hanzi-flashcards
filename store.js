@@ -316,8 +316,12 @@ const Store = (() => {
     },
 
     exportJSON: () => JSON.stringify({ ...data, kind: 'backup', exportedAt: new Date().toISOString() }, null, 1),
-    // no players or history: for giving the units to someone else
-    exportUnitsJSON: () => JSON.stringify({ version: 2, kind: 'units', exportedAt: new Date().toISOString(), units: data.units, removed: data.removed }, null, 1),
+    // no players or history: for giving the units to someone else. Given ids, only those units,
+    // and no record of deleted units: picking a few to send shouldn't carry deletes along with them.
+    exportUnitsJSON(ids) {
+      const units = ids ? data.units.filter(u => ids.includes(u.id)) : data.units;
+      return JSON.stringify({ version: 2, kind: 'units', exportedAt: new Date().toISOString(), units, removed: ids ? {} : data.removed }, null, 1);
+    },
 
     // Reads a file and works out what importing it would do, without changing anything yet.
     // A backup from before profiles (v1) is accepted too; its history lands on profile 1.

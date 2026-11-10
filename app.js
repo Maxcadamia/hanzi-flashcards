@@ -3,8 +3,8 @@
 // Routing is by location.hash so the browser's back button works and nothing needs a server.
 
 // Bump on every release. Settings shows it, which is how to tell what a device is running.
-const APP_VERSION = '1.2.1';
-const APP_RELEASED = '2026-11-01';
+const APP_VERSION = '1.3.0';
+const APP_RELEASED = '2026-11-10';
 
 const $app = document.getElementById('app');
 const dlg = document.getElementById('dialog');
@@ -1122,11 +1122,12 @@ function viewSettings() {
       <p class="desc muted" style="margin-top:-6px">Units and every player's history are stored only on this device. To copy them to another device, export here and import the file there. Importing adds what is new and keeps what is already on the device, so two devices can swap files back and forth. On iPhone and iPad, the Home Screen app and Safari keep separate data.</p>
       <div class="actions" style="justify-content:flex-start">
         <button class="btn" id="s-export">Export everything</button>
-        <button class="btn" id="s-export-units">Export units only</button>
+        <button class="btn" id="s-export-units">Export all units</button>
+        <button class="btn" id="s-export-some">Export some units…</button>
         <button class="btn" id="s-import">Import…</button>
         <input type="file" id="s-file" accept=".json,application/json" hidden>
       </div>
-      <p class="desc muted" style="margin:10px 0 0">Units only leaves out the players and their history: use it to give your units to someone for their own phone.</p>
+      <p class="desc muted" style="margin:10px 0 0">The unit exports leave out the players and their history: use them to give units to someone for their own phone.</p>
     </div>
     <div class="panel">
       <h2>Reset</h2>
@@ -1202,6 +1203,63 @@ function viewSettings() {
     sendFile(Store.exportJSON(), `flashcards-backup-${dayKey(new Date())}.json`, 'Flashcards backup'));
   document.getElementById('s-export-units').addEventListener('click', () =>
     sendFile(Store.exportUnitsJSON(), `flashcards-units-${dayKey(new Date())}.json`, 'Flashcards units'));
+
+  document.getElementById('s-export-some').addEventListener('click', () => {
+    const units = Store.units();
+    if (!units.length) { notice('No units yet', 'There is nothing to export. Add a unit first.'); return; }
+    ask('Export some units', `
+      <input type="search" id="xs-search" placeholder="Filter by name or tag" aria-label="Filter units">
+      <div class="list-head"><span id="xs-summary"></span><span class="spacer"></span>
+        <button type="button" class="link" id="xs-all">Select all shown</button>
+        <button type="button" class="link" id="xs-none">Clear</button></div>
+      <div class="unit-list xs-list" id="xs-list"></div>`,
+      [{ label: 'Cancel', value: '', focus: true }, { label: 'Export', value: 'go', cls: 'primary' }]);
+
+    const $search = document.getElementById('xs-search');
+    const $summary = document.getElementById('xs-summary');
+    const $list = document.getElementById('xs-list');
+    const $go = dlg.querySelector('button[value="go"]');
+    const picked = new Set();
+    let shown = units;
+
+    function renderSummary() {
+      const sel = units.filter(u => picked.has(u.id));
+      const hidden = sel.filter(u => !shown.includes(u)).length;
+      $summary.innerHTML = sel.length
+        ? `<strong>${plural(sel.length, 'unit')}</strong> · ${plural(sel.reduce((n, u) => n + u.cards.length, 0), 'card')}${hidden ? ` (${hidden} hidden by the filter)` : ''}`
+        : 'No units selected';
+      $go.disabled = !sel.length;
+    }
+    function renderList() {
+      const q = $search.value.trim().toLowerCase();
+      shown = units.filter(u => !q || u.name.toLowerCase().includes(q) || u.tags.some(t => t.toLowerCase().includes(q)));
+      $list.innerHTML = shown.length ? shown.map(u => `<label class="unit-row">
+        <input type="checkbox" value="${esc(u.id)}" ${picked.has(u.id) ? 'checked' : ''}>
+        <div class="info">
+          <div class="name">${esc(u.name)}</div>
+          ${u.tags.length ? `<div class="meta">${u.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : ''}
+        </div>
+        <span class="count">${plural(u.cards.length, 'card')}</span>
+      </label>`).join('') : '<p class="muted">No units match this filter.</p>';
+      renderSummary();
+    }
+
+    $list.addEventListener('change', e => {
+      if (e.target.checked) picked.add(e.target.value); else picked.delete(e.target.value);
+      renderSummary();
+    });
+    $search.addEventListener('input', renderList);
+    // Enter would otherwise submit the dialog's form, which presses Cancel
+    $search.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
+    document.getElementById('xs-all').addEventListener('click', () => { shown.forEach(u => picked.add(u.id)); renderList(); });
+    document.getElementById('xs-none').addEventListener('click', () => { picked.clear(); renderList(); });
+    // straight from the click and not after the dialog closes: iOS only opens the share sheet right after a tap
+    $go.addEventListener('click', () => {
+      const ids = units.filter(u => picked.has(u.id)).map(u => u.id);
+      sendFile(Store.exportUnitsJSON(ids), `flashcards-units-${ids.length}-of-${units.length}-${dayKey(new Date())}.json`, 'Flashcards units');
+    });
+    renderList();
+  });
 
   const names = list => esc(list.slice(0, 3).join(', ')) + (list.length > 3 ? ` and ${list.length - 3} more` : '');
   function mergeItems(m) {
