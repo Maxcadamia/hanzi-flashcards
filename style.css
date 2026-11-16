@@ -315,6 +315,18 @@ label.unit-row:hover { border-color: var(--muted); }
 .card-stage.flash-yes .face { box-shadow: 0 0 0 3px var(--good), var(--shadow); }
 .card-stage.flash-no .face { box-shadow: 0 0 0 3px var(--bad), var(--shadow); }
 
+.run-side { justify-content: center; margin-top: 14px; }
+.run-side.locked .seg { opacity: .55; }
+.run-side.locked .seg label { cursor: not-allowed; }
+.speak {
+  position: absolute; right: 14px; bottom: 14px; z-index: 2;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font-size: 20px; line-height: 1; cursor: pointer;
+}
+.speak:hover { background: var(--surface-2); }
+.speak:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.speak.on { border-color: var(--accent); background: var(--accent-soft); }
 .run-controls { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
 .run-controls .btn { min-width: 140px; }
 .btn.no { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }

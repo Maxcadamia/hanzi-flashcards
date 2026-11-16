@@ -37,8 +37,15 @@ copy. In **Settings → Backup and other devices** (first player only):
 - **Play:** pick one or more units (filter by tag), then
   - tap the card or press Space / ↑ to flip,
   - swipe right or press → if you know it,
-  - swipe left or press ← if you don't: the card goes back into the deck and comes round again.
+  - swipe left or press ← if you don't: the card goes back into the deck and comes round again,
+  - tap 🔊 or press S to hear the word,
+  - tap ↩ Undo or press Backspace to take back the last answer.
+
+  The card front (Hanzi, or Pinyin + Meaning) can still be switched on the play screen until the
+  first answer.
 - **Players:** five profiles plus Guest. Units are shared; each player has their own history and
   stats. Only the first player can add, edit or delete units. Guest keeps nothing.
 
-All data lives in the browser's local storage on that device. Nothing is sent anywhere.
+All data lives in the browser's local storage on that device. Nothing is sent anywhere, with one
+exception: 🔊 uses the device's own Chinese voice when it has one (iPhone and iPad do), but on a
+computer without one the browser may use its maker's online voice, which receives the word.

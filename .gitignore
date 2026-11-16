@@ -1,0 +1,2 @@
+# local files that must never reach the public repo
+/private/

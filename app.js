@@ -3,8 +3,8 @@
 // Routing is by location.hash so the browser's back button works and nothing needs a server.
 
 // Bump on every release. Settings shows it, which is how to tell what a device is running.
-const APP_VERSION = '1.3.0';
-const APP_RELEASED = '2026-11-10';
+const APP_VERSION = '1.4.0';
+const APP_RELEASED = '2026-11-16';
 
 const $app = document.getElementById('app');
 const dlg = document.getElementById('dialog');
@@ -85,6 +85,39 @@ function bindFrontChoice(name) {
     Store.save();
   }));
 }
+
+// ---------------------------------------------------------------- pronunciation
+// The device's own Chinese voice. On iPhone it is built in, so it needs no internet.
+
+const Speech = (() => {
+  const ok = 'speechSynthesis' in window && typeof SpeechSynthesisUtterance === 'function';
+  let voice = null;
+  // Mandarin only (a zh-HK voice would read the characters in Cantonese), and one on the device
+  // before an online one, which sends the word to the browser maker
+  function pickVoice() {
+    const zh = speechSynthesis.getVoices().filter(v => /^(zh|cmn)/i.test(v.lang) && !/HK|yue/i.test(v.lang));
+    const cn = v => /^zh[-_]CN/i.test(v.lang);
+    voice = zh.find(v => cn(v) && v.localService) || zh.find(v => v.localService) || zh.find(cn) || zh[0] || null;
+  }
+  if (ok) {
+    pickVoice();
+    speechSynthesis.onvoiceschanged = pickVoice;
+  }
+  return {
+    ok,
+    say(text, onEnd) {
+      if (!ok) return;
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = voice ? voice.lang : 'zh-CN';
+      if (voice) u.voice = voice;
+      u.rate = 0.85;
+      if (onEnd) { u.onend = onEnd; u.onerror = onEnd; }
+      speechSynthesis.speak(u);
+    },
+    stop() { if (ok) speechSynthesis.cancel(); },
+  };
+})();
 
 // ---------------------------------------------------------------- profiles
 
@@ -548,6 +581,7 @@ function viewRun() {
       <div class="timer" id="r-timer" aria-label="Elapsed time">0:00</div>
     </div>
     <div class="progress" aria-hidden="true"><div id="r-prog"></div></div>
+    <div class="front-choice run-side" id="r-side">Card front ${frontChoiceHTML('r-side')}<span class="muted run-side-note">can change until the first answer</span></div>
     <div class="card-stage" id="r-stage">
       <div class="card-drag" id="r-drag">
         <div class="card" id="r-card" aria-live="polite">
@@ -556,6 +590,7 @@ function viewRun() {
         </div>
         <div class="swipe-hint yes" id="r-hint-yes">Know ✓</div>
         <div class="swipe-hint no" id="r-hint-no">✗ Don't know</div>
+        ${Speech.ok ? '<button type="button" class="speak" id="r-speak" aria-label="Say it" title="Say it (S)">🔊</button>' : ''}
       </div>
     </div>
     <div class="run-controls">
@@ -563,17 +598,23 @@ function viewRun() {
       <button class="btn" id="r-flip">Flip</button>
       <button class="btn yes" id="r-yes">Know →</button>
     </div>
-    <p class="hint keys"><kbd>Space</kbd> or <kbd>↑</kbd> flip · <kbd>→</kbd> know · <kbd>←</kbd> don't know (the card goes back into the deck) · <kbd>Esc</kbd> end session</p>
-    <p class="hint touch">Tap the card to flip · swipe right if you know it · swipe left if you don't (it goes back into the deck)</p>
-    <div class="actions run-end"><button class="btn small" id="r-end">End session</button></div>
+    <p class="hint keys"><kbd>Space</kbd> or <kbd>↑</kbd> flip · <kbd>→</kbd> know · <kbd>←</kbd> don't know (the card goes back into the deck)${Speech.ok ? ' · <kbd>S</kbd> say it' : ''} · <kbd>Backspace</kbd> undo · <kbd>Esc</kbd> end session</p>
+    <p class="hint touch">Tap the card to flip · swipe right if you know it · swipe left if you don't (it goes back into the deck) · Undo takes back a wrong swipe</p>
+    <div class="actions run-end">
+      <button class="btn small" id="r-undo" disabled>↩ Undo</button>
+      <button class="btn small" id="r-end">End session</button>
+    </div>
   </section>`;
 
   const $ = id => document.getElementById(id);
   const $card = $('r-card'), $front = $('r-front'), $back = $('r-back'), $stage = $('r-stage');
   const $drag = $('r-drag'), $hintYes = $('r-hint-yes'), $hintNo = $('r-hint-no');
-  const backSide = g.front === 'pm' ? 'hanzi' : 'pm';
+  const $sides = [...document.querySelectorAll('input[name="r-side"]')];
+  let backSide = g.front === 'pm' ? 'hanzi' : 'pm';
   const multiUnit = g.units.length > 1;
   let flashTimer = null;
+  // the game as it was before each answer, newest last, for Undo
+  const undoStack = [];
 
   g.startedAt = Date.now();
   const tick = () => { $('r-timer').textContent = fmtDuration(Date.now() - g.startedAt); };
@@ -593,6 +634,32 @@ function viewRun() {
     $('r-miss').textContent = g.unknownPresses;
     $('r-left').textContent = g.queue.length;
     $('r-prog').style.width = pct(g.knownIds.size, g.total) + '%';
+    // the card front can change only until the first answer, so a session is played one way throughout
+    const started = g.knownIds.size > 0 || g.unknownPresses > 0;
+    $sides.forEach(r => { r.disabled = started; });
+    $('r-side').classList.toggle('locked', started);
+    $('r-undo').disabled = !undoStack.length;
+    Speech.stop();
+    if ($('r-speak')) $('r-speak').classList.remove('on');
+  }
+
+  function remember() {
+    undoStack.push({ queue: g.queue.slice(), misses: new Map(g.misses), knownIds: new Set(g.knownIds), knownFirstTry: g.knownFirstTry, unknownPresses: g.unknownPresses });
+    if (undoStack.length > 50) undoStack.shift();
+  }
+
+  function undo() {
+    const before = undoStack.pop();
+    if (!before) return;
+    Object.assign(g, before);
+    show();
+  }
+
+  function say() {
+    const btn = $('r-speak');
+    if (!btn) return;
+    btn.classList.add('on');
+    Speech.say(g.queue[0].card.hanzi, () => btn.classList.remove('on'));
   }
 
   function flash(kind) {
@@ -608,6 +675,7 @@ function viewRun() {
   }
 
   function know() {
+    remember();
     const e = g.queue.shift();
     g.knownIds.add(e.card.id);
     if (!g.misses.has(e.card.id)) g.knownFirstTry++;
@@ -617,6 +685,7 @@ function viewRun() {
   }
 
   function dontKnow() {
+    remember();
     const e = g.queue.shift();
     g.misses.set(e.card.id, (g.misses.get(e.card.id) || 0) + 1);
     g.unknownPresses++;
@@ -687,11 +756,13 @@ function viewRun() {
     if (dlg.open || e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.key;
     // Escape too: otherwise the same keypress closes the end-session dialog it just opened
-    if (k === ' ' || k === 'Escape' || k.startsWith('Arrow')) e.preventDefault();
+    if (k === ' ' || k === 'Escape' || k === 'Backspace' || k.startsWith('Arrow')) e.preventDefault();
     if (e.repeat || busy) return;
     if (k === ' ' || k === 'ArrowUp') flip();
     else if (k === 'ArrowRight') know();
     else if (k === 'ArrowLeft') dontKnow();
+    else if (k === 'Backspace' || k === 'z' || k === 'Z') undo();
+    else if (k === 's' || k === 'S') say();
     else if (k === 'Escape') endEarly();
   }
   const guard = e => { e.preventDefault(); e.returnValue = ''; };
@@ -722,7 +793,7 @@ function viewRun() {
   }
 
   $drag.addEventListener('pointerdown', e => {
-    if (busy || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    if (busy || (e.pointerType === 'mouse' && e.button !== 0) || e.target.closest('.speak')) return;
     gesture = { id: e.pointerId, x: e.clientX, y: e.clientY, dx: 0, dragging: false, samples: [[e.timeStamp, e.clientX]] };
   });
   $drag.addEventListener('pointermove', e => {
@@ -763,11 +834,22 @@ function viewRun() {
   $('r-yes').addEventListener('click', press(know));
   $('r-no').addEventListener('click', press(dontKnow));
   $('r-flip').addEventListener('click', press(flip));
+  $('r-undo').addEventListener('click', press(undo));
   $('r-end').addEventListener('click', press(endEarly));
+  if ($('r-speak')) $('r-speak').addEventListener('click', press(say));
+  $sides.forEach(r => r.addEventListener('change', () => {
+    if (g.knownIds.size || g.unknownPresses) return;
+    g.front = r.value;
+    backSide = g.front === 'pm' ? 'hanzi' : 'pm';
+    Store.prefs.front = g.front;
+    Store.save();
+    r.blur();   // so Space and the arrow keys go back to the cards
+    show();
+  }));
   document.addEventListener('keydown', onKey);
   window.addEventListener('beforeunload', guard);
   // leaving through the nav mid-game still records what was answered
-  cleanup = () => { if (!g.done) finish(false, false); };
+  cleanup = () => { Speech.stop(); if (!g.done) finish(false, false); };
 
   show();
 }
@@ -1066,7 +1148,7 @@ function viewHistory() {
   let rt = null;
   const onResize = () => { clearTimeout(rt); rt = setTimeout(draw, 120); };
   window.addEventListener('resize', onResize);
-  cleanup = () => window.removeEventListener('resize', onResize);
+  cleanup = () => { clearTimeout(rt); window.removeEventListener('resize', onResize); };
 
   document.getElementById('h-rows').addEventListener('click', e => {
     const tr = e.target.closest('tr[data-id]');
