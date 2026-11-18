@@ -3,8 +3,8 @@
 // Routing is by location.hash so the browser's back button works and nothing needs a server.
 
 // Bump on every release. Settings shows it, which is how to tell what a device is running.
-const APP_VERSION = '1.4.0';
-const APP_RELEASED = '2026-11-16';
+const APP_VERSION = '1.4.1';
+const APP_RELEASED = '2026-11-18';
 
 const $app = document.getElementById('app');
 const dlg = document.getElementById('dialog');
@@ -166,11 +166,14 @@ function viewWho() {
 
 // ---------------------------------------------------------------- activation
 // A deterrent, not security: the check runs on the device and this file is public, so anyone
-// who reads the source can get past it. One code for everyone; only its hash is here. Devices
-// already in use when this was added were let in without a code. Changing ACTIVATION_HASH
-// locks out every device that got in with the old code; those older devices stay in.
+// who reads the source can get past it. Only the codes' hashes are here. Devices already in use
+// when this was added were let in without a code. A device remembers which code it got in with,
+// so moving a hash from ACTIVATION_HASHES to EXPIRED_HASHES locks out only the devices that used
+// that code; the others, and the older devices, stay in.
 
-const ACTIVATION_HASH = 6171702345866619;
+const ACTIVATION_HASHES = [5245435499656449, 8170897765496584];
+// still recognised, so whoever types one is told it expired rather than that it is wrong
+const EXPIRED_HASHES = [6171702345866619];
 
 // cyrb53: a small 53-bit string hash
 function hash53(str) {
@@ -203,24 +206,28 @@ const Activation = (() => {
     device: rec.device,
     how: () => rec.how,
     at: () => rec.at,
-    ok: () => rec.how === 'existing' || (rec.how === 'code' && rec.code === ACTIVATION_HASH),
-    grant(how) {
+    ok: () => rec.how === 'existing' || (rec.how === 'code' && ACTIVATION_HASHES.includes(rec.code)),
+    // got in with a code that has since expired
+    expired: () => rec.how === 'code' && !ACTIVATION_HASHES.includes(rec.code),
+    grant(how, code) {
       rec = { device: rec.device, how, at: new Date().toISOString() };
-      if (how === 'code') rec.code = ACTIVATION_HASH;
+      if (how === 'code') rec.code = code;
       keep();
     },
-    // 'ok', 'bad', or after five wrong codes in a row the seconds left to wait
+    // 'ok', 'expired', 'bad', or after five wrong codes in a row the seconds left to wait
     check(typed) {
       const wait = Math.ceil(((rec.waitUntil || 0) - Date.now()) / 1000);
       if (wait > 0) return wait;
-      if (hash53('hanzi:' + String(typed).toUpperCase().replace(/[^A-Z0-9]/g, '')) === ACTIVATION_HASH) {
-        this.grant('code');
+      const h = hash53('hanzi:' + String(typed).toUpperCase().replace(/[^A-Z0-9]/g, ''));
+      if (ACTIVATION_HASHES.includes(h)) {
+        this.grant('code', h);
         return 'ok';
       }
       rec.fails = (rec.fails || 0) + 1;
       if (rec.fails >= 5) { rec.fails = 0; rec.waitUntil = Date.now() + 30000; }
       keep();
-      return rec.waitUntil > Date.now() ? 30 : 'bad';
+      if (rec.waitUntil > Date.now()) return 30;
+      return EXPIRED_HASHES.includes(h) ? 'expired' : 'bad';
     },
   };
 })();
@@ -230,7 +237,9 @@ function viewLocked() {
   <section class="lock">
     <div class="lock-mark" aria-hidden="true">汉</div>
     <h1>Activate Hanzi Flashcards</h1>
-    <p class="lock-lead">This copy is not activated. Activation codes are issued to invited users only.</p>
+    <p class="lock-lead">${Activation.expired()
+      ? 'The activation code this device used has expired. Enter a new code to keep using the app: your units and history are still here.'
+      : 'This copy is not activated. Activation codes are issued to invited users only.'}</p>
     <form class="panel lock-form" id="act-form" autocomplete="off" novalidate>
       <label for="act-code">Activation code</label>
       <input id="act-code" class="lock-input" placeholder="XXXX-XXXX-XXXX" maxlength="14"
@@ -279,7 +288,9 @@ function viewLocked() {
       busy = false;
       $go.disabled = false;
       $go.textContent = 'Activate';
-      fail(r === 'bad' ? 'That code is not valid. Check it and try again.' : `Too many attempts. Try again in ${plural(r, 'second')}.`);
+      fail(r === 'bad' ? 'That code is not valid. Check it and try again.'
+        : r === 'expired' ? 'That code has expired. Ask the person who shared this app with you for a new one.'
+        : `Too many attempts. Try again in ${plural(r, 'second')}.`);
       $in.select();
     }, 700);
   });
